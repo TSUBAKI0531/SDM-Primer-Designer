@@ -1,84 +1,72 @@
+import streamlit as st
 import pandas as pd
-import logging
-from Bio import SeqIO, Restriction
-from Bio.Seq import Seq
-from Bio.SeqUtils import MeltingTemp as mt
-from Bio.Data import CodonTable
+from io import StringIO, BytesIO
+from sdm_designer import SDMPrimerDesigner
+from Bio import SeqIO
 
-# --- 簡易的な大腸菌コドン頻度テーブル (Most frequent codons) ---
-# 実用時は外部のJSONやBio.SeqUtils.CodonUsageから読み込むとより正確です
-E_COLI_BEST_CODONS = {
-    'A': 'GCG', 'R': 'CGT', 'N': 'AAC', 'D': 'GAT', 'C': 'TGC',
-    'Q': 'CAG', 'E': 'GAA', 'G': 'GGT', 'H': 'CAC', 'I': 'ATT',
-    'L': 'CTG', 'K': 'AAA', 'M': 'ATG', 'F': 'TTT', 'P': 'CCG',
-    'S': 'AGC', 'T': 'ACC', 'W': 'TGG', 'Y': 'TAT', 'V': 'GTG',
-    '*': 'TAA'
-}
+# ページ設定は必ず一番最初に実行
+st.set_page_config(page_title="SDM Primer Designer", layout="wide")
 
-class SDMPrimerDesigner:
-    def __init__(self, template_dna, host_codons=E_COLI_BEST_CODONS):
-        self.template_dna = Seq(template_dna.upper().strip().replace(" ", ""))
-        self.host_codons = host_codons
-        # 一般的な制限酵素セット (EcoRI, BamHI, HindIII, XhoIなど)
-        self.enzyme_set = Restriction.CommOnly
+# タイトルは「if」の外に配置し、常に表示させる
+st.title("🧬 SDM Primer Designer")
+st.write("FASTAファイルと変異リストをアップロードしてプライマーを設計します。")
 
-    def get_optimized_codon(self, amino_acid):
-        return self.host_codons.get(amino_acid, None)
+# サイドバーの設定
+st.sidebar.header("1. 入力ファイルのアップロード")
+fasta_file = st.sidebar.file_uploader("FASTAファイルをアップロード", type=["fasta", "fa"])
+mutations_file = st.sidebar.file_uploader("変異リスト(CSV/Excel)をアップロード", type=["csv", "xlsx"])
 
-    def analyze_restriction(self, original_seq, modified_seq):
-        """変異前後の制限酵素サイトの変化を解析"""
-        orig_analysis = Restriction.Analysis(self.enzyme_set, original_seq)
-        mod_analysis = Restriction.Analysis(self.enzyme_set, modified_seq)
-        
-        orig_sites = set(orig_analysis.with_sites().keys())
-        mod_sites = set(mod_analysis.with_sites().keys())
-        
-        new_sites = mod_sites - orig_sites
-        lost_sites = orig_sites - mod_sites
-        
-        return list(new_sites), list(lost_sites)
+# ファイルがまだアップロードされていない時の案内
+if not fasta_file or not mutations_file:
+    st.info("👈 左側のサイドバーからファイルをアップロードしてください。")
+    # ここで処理を止める（以降の設計処理は行わない）
+    st.stop()
 
-    def design(self, row, method='overlapping', target_tm=78):
-        name = row['mutation_name']
-        dna_idx = (int(row['aa_pos']) - 1) * 3
-        
-        # 1. 変異DNAの決定（コドン最適化適用）
-        if row['mode'] == 'sub':
-            mut_dna = self.get_optimized_codon(row['target_aa'])
-            target_len = 3
-        elif row['mode'] == 'ins':
-            mut_dna = str(row['insert_seq']).upper()
-            target_len = 0
-        elif row['mode'] == 'del':
-            mut_dna = ""
-            target_len = int(row.get('del_len', 1)) * 3
-        else:
-            return None
+# --- ここから下はファイルがアップロードされた時のみ実行される ---
+st.success("ファイルの読み込みに成功しました！")
 
-        # 2. 変異後の全配列を作成（制限酵素チェック用）
-        modified_full_seq = self.template_dna[:dna_idx] + mut_dna + self.template_dna[dna_idx + target_len:]
-        new_sites, lost_sites = self.analyze_restriction(self.template_dna, modified_full_seq)
+# 目標Tm値などのパラメータ
+target_tm = st.sidebar.slider("目標 Tm値 (°C)", 60, 85, 78)
+method = st.sidebar.selectbox("設計手法", ["overlapping", "back-to-back"])
 
-        # 3. プライマー設計（前回のロジックを流用）
-        # ※ここではoverlappingを例に簡略化
-        length = 15
-        while length < 35:
-            start = dna_idx - length
-            end = dna_idx + len(mut_dna) + length
-            if start < 0 or end > len(modified_full_seq): break
+if st.button("プライマー設計を開始"):
+    with st.spinner("設計中..."):
+        try:
+            # デザイナーの初期化
+            fasta_content = fasta_file.getvalue().decode("utf-8")
+            record = SeqIO.read(StringIO(fasta_content), "fasta")
+            designer = SDMPrimerDesigner(str(record.seq))
             
-            fwd = str(modified_full_seq[start:end])
-            tm = mt.Tm_NN(Seq(fwd))
-            if tm >= target_tm:
-                res = {
-                    "name": name,
-                    "fwd": fwd,
-                    "rev": str(Seq(fwd).reverse_complement()),
-                    "tm": round(tm, 2),
-                    "new_sites": ", ".join([str(e) for e in new_sites]),
-                    "lost_sites": ", ".join([str(e) for e in lost_sites])
-                }
-                logging.info(f"[{name}] 設計成功 (New: {res['new_sites']})")
-                return res
-            length += 1
-        return None
+            # 変異リストの読み込み
+            if mutations_file.name.endswith('.csv'):
+                df = pd.read_csv(mutations_file)
+            else:
+                df = pd.read_excel(mutations_file)
+            
+            # 設計実行（結果の取得）
+            results = []
+            for _, row in df.iterrows():
+                # run_design または design メソッド（作成したクラスに合わせて変更してください）
+                res = designer.design_primers(row, method=method, target_tm=target_tm)
+                if res:
+                    results.append(res)
+            
+            if results:
+                result_df = pd.DataFrame(results)
+                st.subheader("設計結果")
+                st.dataframe(result_df)
+                
+                # Excelダウンロード機能
+                output = BytesIO()
+                result_df.to_excel(output, index=False)
+                st.download_button(
+                    label="結果をExcelでダウンロード",
+                    data=output.getvalue(),
+                    file_name="primer_results.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.warning("条件に合うプライマーが見つかりませんでした。")
+                
+        except Exception as e:
+            st.error(f"解析中にエラーが発生しました: {e}")
