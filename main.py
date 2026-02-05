@@ -26,7 +26,7 @@ if not fasta_file or not mutations_file:
 st.success("ファイルの読み込みに成功しました！")
 
 # 目標Tm値などのパラメータ
-target_tm = st.sidebar.slider("目標 Tm値 (°C)", 60, 85, 78)
+target_tm = st.sidebar.slider("目標 Tm値 (°C)", 50, 85, 60)
 method = st.sidebar.selectbox("設計手法", ["overlapping", "back-to-back"])
 
 # --- main.py の設計開始ボタン内の処理 ---
