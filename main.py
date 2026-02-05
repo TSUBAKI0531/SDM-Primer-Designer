@@ -51,7 +51,7 @@ if st.button("プライマー設計を開始"):
             results = []
             for _, row in df.iterrows():
                 # run_design または design メソッド（作成したクラスに合わせて変更してください）
-                res = designer.design_primers(row, method=method, target_tm=target_tm)
+                res = designer.design(row, method=method, target_tm=target_tm)
                 if res:
                     results.append(res)
             
