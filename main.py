@@ -29,12 +29,16 @@ st.success("ファイルの読み込みに成功しました！")
 target_tm = st.sidebar.slider("目標 Tm値 (°C)", 60, 85, 78)
 method = st.sidebar.selectbox("設計手法", ["overlapping", "back-to-back"])
 
+# --- main.py の設計開始ボタン内の処理 ---
 if st.button("プライマー設計を開始"):
     with st.spinner("設計中..."):
         try:
-            # デザイナーの初期化
+            # FASTAの内容を読み込み
             fasta_content = fasta_file.getvalue().decode("utf-8")
-            record = SeqIO.read(StringIO(fasta_content), "fasta")
+            fasta_io = StringIO(fasta_content)
+            record = SeqIO.read(fasta_io, "fasta")
+            
+            # クラスの初期化（配列文字列を渡す）
             designer = SDMPrimerDesigner(str(record.seq))
             
             # 変異リストの読み込み

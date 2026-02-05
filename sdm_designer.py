@@ -13,18 +13,10 @@ logging.basicConfig(
 )
 
 class SDMPrimerDesigner:
-    """
-    Site-Directed Mutagenesis Primer Design Tool
-    Supports: Overlapping/Back-to-back, Codon Optimization, Restriction Site Analysis
-    """
-    # 大腸菌の最適コドン（簡易版）
-    ECOLI_CODONS = {'A':'GCG','R':'CGT','N':'AAC','D':'GAT','C':'TGC','Q':'CAG','E':'GAA','G':'GGT','H':'CAC','I':'ATT','L':'CTG','K':'AAA','M':'ATG','F':'TTT','P':'CCG','S':'AGC','T':'ACC','W':'TGG','Y':'TAT','V':'GTG','*':'TAA'}
-
-    def __init__(self, fasta_path, host_codons=ECOLI_CODONS):
-        record = SeqIO.read(fasta_path, "fasta")
-        self.template_dna = record.seq.upper()
-        self.template_id = record.id
-        self.host_codons = host_codons
+    def __init__(self, template_sequence, host_codons=None):
+        # ファイルパスではなく、文字列を直接セットするように修正
+        self.template_dna = str(template_sequence).upper().strip()
+        self.host_codons = host_codons if host_codons else self.ECOLI_CODONS
         self.enzymes = Restriction.CommOnly
 
     def _get_codon(self, aa):
