@@ -1,0 +1,4 @@
+mutation_name,mode,aa_pos,target_aa,insert_seq,del_len
+M1_Y3D,sub,3,D,,0
+M2_Ins,ins,6,,GGGGGG,0
+M3_Del,del,10,,,2
