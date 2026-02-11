@@ -1,5 +1,6 @@
 from Bio.Seq import Seq
 from Bio.SeqUtils import MeltingTemp as mt
+from Bio.SeqUtils import molecular_weight # 分子量計算用に追加
 from Bio import Restriction
 
 class SDMPrimerDesigner:
@@ -22,6 +23,12 @@ class SDMPrimerDesigner:
         self.template_dna = str(template_sequence).upper().strip()
         self.host_codons = host_codons if host_codons else self.ECOLI_CODONS
         self.enzymes = Restriction.CommOnly
+
+    def _calculate_gc_content(self, seq_str):
+        """GC含量(%)を計算する"""
+        g = seq_str.count('G')
+        c = seq_str.count('C')
+        return round((g + c) / len(seq_str) * 100, 1)
 
     def _calculate_self_dimer_tm(self, seq_str):
         seq = str(seq_str).upper()
@@ -75,9 +82,15 @@ class SDMPrimerDesigner:
                 fwd = str(mod_seq[start:end])
                 tm = mt.Tm_NN(Seq(fwd))
                 if tm >= target_tm:
+                    fwd_seq_obj = Seq(fwd)
                     return {
-                        "mutation_name": name, "fwd_primer": fwd, "rev_primer": str(Seq(fwd).reverse_complement()),
-                        "Tm": round(tm, 2), "Dimer_Tm": self._calculate_self_dimer_tm(fwd),
+                        "mutation_name": name, 
+                        "fwd_primer": fwd, 
+                        "rev_primer": str(fwd_seq_obj.reverse_complement()),
+                        "Tm": round(tm, 2), 
+                        "GC_%": self._calculate_gc_content(fwd), # 追加
+                        "MW": round(molecular_weight(fwd_seq_obj, seq_type='DNA'), 1), # 追加
+                        "Dimer_Tm": self._calculate_self_dimer_tm(fwd),
                         "New_Sites": ", ".join(new_sites) if new_sites else "None",
                         "full_seq": mod_seq, "mut_start": dna_idx, "mut_end": dna_idx + len(mut_dna)
                     }
