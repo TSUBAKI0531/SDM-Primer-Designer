@@ -3,3 +3,5 @@ pandas
 biopython
 openpyxl
 xlsxwriter
+dna-features-viewer
+matplotlib
