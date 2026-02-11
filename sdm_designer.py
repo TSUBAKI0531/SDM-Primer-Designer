@@ -3,8 +3,7 @@ from Bio.SeqUtils import MeltingTemp as mt
 from Bio import Restriction
 
 class SDMPrimerDesigner:
-    # --- 修正: 検出感度向上のためのシグネチャー配列データベース ---
-    # パーツ全体ではなく、特徴的な30bp程度の配列を指定することで検出率を高めます
+    # 標準的なパーツのシグネチャー配列
     FEATURE_LIBRARY = {
         "AmpR (bla gene)": "TTTCCGTGTCGCCCTTATTCCCTTTTTTGC", 
         "pUC ori": "GGTGAGCGTGGGTCTCGCGGTATCATTGC", 
@@ -25,19 +24,24 @@ class SDMPrimerDesigner:
         self.host_codons = host_codons if host_codons else self.ECOLI_CODONS
         self.enzymes = Restriction.CommOnly
 
-    def detect_features(self, sequence):
-        """シグネチャー配列を用いてパーツを検出"""
+    def detect_features(self, sequence, custom_library=None):
+        """標準ライブラリとカスタムライブラリからパーツを検索"""
         found_features = []
         seq_str = str(sequence).upper()
         
-        for name, sig_seq in self.FEATURE_LIBRARY.items():
-            # 順方向
-            start = seq_str.find(sig_seq)
+        # 検索用ライブラリを統合
+        search_library = self.FEATURE_LIBRARY.copy()
+        if custom_library:
+            search_library.update(custom_library)
+        
+        for name, sig_seq in search_library.items():
+            # 順方向の検索
+            start = seq_str.find(sig_seq.upper())
             if start != -1:
                 found_features.append({"name": name, "start": start, "end": start + len(sig_seq), "strand": 1})
                 continue
-            # 逆方向
-            rc_sig = str(Seq(sig_seq).reverse_complement())
+            # 逆方向の検索
+            rc_sig = str(Seq(sig_seq).reverse_complement()).upper()
             start_rc = seq_str.find(rc_sig)
             if start_rc != -1:
                 found_features.append({"name": name, "start": start_rc, "end": start_rc + len(rc_sig), "strand": -1})
@@ -61,7 +65,7 @@ class SDMPrimerDesigner:
 
         mod_seq = self.template_dna[:dna_idx] + mut_dna + self.template_dna[dna_idx + ref_len:]
         
-        # 制限酵素チェック
+        # 制限酵素チェック（変異周辺）
         window = 20
         check_start = max(0, dna_idx - window)
         check_end = min(len(self.template_dna), dna_idx + len(mut_dna) + window)
