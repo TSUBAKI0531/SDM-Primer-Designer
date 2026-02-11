@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import json
+import json # JSON処理用
 from io import StringIO, BytesIO
 from sdm_designer import SDMPrimerDesigner
 from Bio import SeqIO
@@ -25,7 +25,6 @@ def create_map_image(res, detected_features, view_mode="Linear"):
     record_cls = CircularGraphicRecord if is_circular else GraphicRecord
     record = record_cls(sequence_length=len(res['full_seq']), features=features)
 
-    # Excel用にサイズを調整
     fig, ax = plt.subplots(figsize=(6, 5) if is_circular else (8, 2))
     record.plot(ax=ax, with_ruler=not is_circular)
     
@@ -35,24 +34,61 @@ def create_map_image(res, detected_features, view_mode="Linear"):
     plt.close(fig)
     return img_buf
 
-if 'custom_features' not in st.session_state: st.session_state['custom_features'] = {}
+# セッション状態の初期化
+if 'custom_features' not in st.session_state:
+    st.session_state['custom_features'] = {}
 
 # --- サイドバー設定 ---
 st.sidebar.header("1. 入力ファイルのアップロード")
 fasta_file = st.sidebar.file_uploader("FASTAをアップロード", type=["fasta", "fa"])
 mutations_file = st.sidebar.file_uploader("変異リストをアップロード", type=["csv", "xlsx"])
 target_tm = st.sidebar.slider("目標 Tm値 (°C)", 50, 85, 68)
-
-# 表示モードをサイドバーへ移動（Excel出力にも反映させるため）
 view_mode = st.sidebar.radio("ベクターマップ表示モード", ["Linear (直線状)", "Circular (円形)"], horizontal=True)
 
 st.sidebar.divider()
 with st.sidebar.expander("✨ カスタムパーツの管理"):
-    new_f_name = st.text_input("パーツ名")
-    new_f_seq = st.text_input("配列")
+    # 新規登録
+    new_f_name = st.text_input("パーツ名 (例: GFP)")
+    new_f_seq = st.text_input("シグネチャー配列 (20bp~)")
     if st.button("登録"):
         if new_f_name and new_f_seq:
             st.session_state['custom_features'][new_f_name] = new_f_seq.strip().upper()
+            st.success(f"{new_f_name} を追加しました")
+
+    st.write("---")
+    # JSON書き出し (Export)
+    if st.session_state['custom_features']:
+        json_str = json.dumps(st.session_state['custom_features'], indent=4)
+        st.download_button(
+            label="JSONとして書き出し",
+            data=json_str,
+            file_name="custom_features.json",
+            mime="application/json"
+        )
+    
+    # JSON読み込み (Import)
+    uploaded_json = st.file_uploader("JSONから読み込み", type=["json"])
+    if uploaded_json is not None:
+        try:
+            imported_data = json.load(uploaded_json)
+            st.session_state['custom_features'].update(imported_data)
+            st.success("JSONから読み込みました")
+        except Exception as e:
+            st.error(f"読み込みエラー: {e}")
+
+    # 登録済みリストの表示と削除
+    if st.session_state['custom_features']:
+        st.write("---")
+        for n in list(st.session_state['custom_features'].keys()):
+            c1, c2 = st.columns([4, 1])
+            c1.caption(n)
+            if c2.button("🗑️", key=f"del_{n}"):
+                del st.session_state['custom_features'][n]
+                st.rerun()
+
+if not fasta_file or not mutations_file:
+    st.info("サイドバーからファイルをアップロードしてください。")
+    st.stop()
 
 # --- 解析とExcel生成 ---
 if st.button("プライマー設計を開始"):
@@ -72,29 +108,24 @@ if st.button("プライマー設計を開始"):
                 st.session_state['results'] = results
                 result_df_clean = pd.DataFrame(results).drop(['full_seq', 'mut_start', 'mut_end'], axis=1)
                 
-                # Excel生成処理
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     result_df_clean.to_excel(writer, index=False, sheet_name='SDM Report')
-                    
                     workbook = writer.book
                     worksheet = writer.sheets['SDM Report']
                     
-                    # 画像用の列(H列)と行の高さを調整
-                    worksheet.set_column('H:H', 60) # 画像を表示する列の幅
+                    # 画像用列(H列)の設定
+                    worksheet.set_column('H:H', 60)
                     header_format = workbook.add_format({'bold': True, 'bg_color': '#D9EAD3', 'border': 1})
-                    worksheet.write(0, 7, 'Vector Map View', header_format)
+                    worksheet.write(0, 7, f'Vector Map ({view_mode})', header_format)
                     
                     # 各行に画像を配置
                     row_height = 180 if "Circular" in view_mode else 80
                     for i, res in enumerate(results):
                         worksheet.set_row(i + 1, row_height)
                         img_buf = create_map_image(res, detected, view_mode=view_mode)
-                        
-                        # セル内に収まるようにスケール調整
-                        y_offset = 5
                         worksheet.insert_image(i + 1, 7, f'map_{i}.png', 
-                                               {'image_data': img_buf, 'x_scale': 0.5, 'y_scale': 0.5, 'y_offset': y_offset})
+                                               {'image_data': img_buf, 'x_scale': 0.5, 'y_scale': 0.5, 'y_offset': 5})
 
                 st.success("解析完了！")
                 st.dataframe(result_df_clean)
