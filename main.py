@@ -30,51 +30,52 @@ def create_map_image(res, detected_features, view_mode="Linear"):
 if 'custom_features' not in st.session_state: st.session_state['custom_features'] = {}
 
 st.sidebar.header("1. 入力ファイルのアップロード")
-fasta_file = st.sidebar.file_uploader("FASTAをアップロード", type=["fasta", "fa"])
-mutations_file = st.sidebar.file_uploader("変異リストをアップロード", type=["csv", "xlsx"])
+f_file = st.sidebar.file_uploader("FASTA", type=["fasta", "fa"])
+m_file = st.sidebar.file_uploader("変異リスト", type=["csv", "xlsx"])
 target_tm = st.sidebar.slider("目標 Tm値 (°C)", 50, 85, 68)
-view_mode = st.sidebar.radio("ベクターマップ表示モード", ["Linear (直線状)", "Circular (円形)"], horizontal=True)
+view_mode = st.sidebar.radio("表示モード", ["Linear (直線状)", "Circular (円形)"], horizontal=True)
 
 st.sidebar.divider()
-with st.sidebar.expander("✨ カスタムパーツの管理"):
-    new_f_name = st.text_input("パーツ名"); new_f_seq = st.text_input("配列")
-    if st.button("登録"):
-        if new_f_name and new_f_seq: st.session_state['custom_features'][new_f_name] = new_f_seq.strip().upper()
+with st.sidebar.expander("✨ カスタムパーツ"):
+    n_name = st.text_input("名前"); n_seq = st.text_input("配列")
+    if st.button("登録") and n_name and n_seq: st.session_state['custom_features'][n_name] = n_seq.strip().upper()
     if st.session_state['custom_features']:
-        st.download_button("JSON書き出し", json.dumps(st.session_state['custom_features'], indent=4), "custom_features.json", "application/json")
-    uploaded_json = st.file_uploader("JSONから読み込み", type=["json"])
-    if uploaded_json:
-        try:
-            st.session_state['custom_features'].update(json.load(uploaded_json)); st.success("読み込み成功")
-        except: st.error("エラー")
+        st.download_button("JSON保存", json.dumps(st.session_state['custom_features'], indent=4), "features.json", "application/json")
+    up_json = st.sidebar.file_uploader("JSON読込", type=["json"], key="json_up")
+    if up_json: 
+        try: st.session_state['custom_features'].update(json.load(up_json))
+        except: pass
 
-if not fasta_file or not mutations_file:
-    st.info("サイドバーからファイルをアップロードしてください。")
+if not f_file or not m_file:
+    st.info("ファイルをアップロードしてください。")
     st.stop()
 
 if st.button("プライマー設計を開始"):
-    with st.spinner("解析とレポート生成中..."):
+    with st.spinner("解析中..."):
         try:
-            fasta_content = fasta_file.getvalue().decode("utf-8")
+            fasta_content = f_file.getvalue().decode("utf-8")
             record = SeqIO.read(StringIO(fasta_content), "fasta")
             designer = SDMPrimerDesigner(str(record.seq))
-            detected = designer.detect_features(str(record.seq), custom_library=st.session_state['custom_features'])
+            detected = designer.detect_features(str(record.seq), st.session_state['custom_features'])
             st.session_state['detected_features'] = detected
-            df = pd.read_csv(mutations_file) if mutations_file.name.endswith('.csv') else pd.read_excel(mutations_file)
-            results = [designer.design(row, target_tm=target_tm) for _, row in df.iterrows() if designer.design(row, target_tm=target_tm)]
+            
+            df = pd.read_csv(m_file) if m_file.name.endswith('.csv') else pd.read_excel(m_file)
+            results = []
+            for _, row in df.iterrows():
+                res = designer.design(row, target_tm=target_tm)
+                if res: results.append(res)
             
             if results:
                 st.session_state['results'] = results
                 res_df = pd.DataFrame(results).drop(['full_seq', 'mut_start', 'mut_end'], axis=1)
                 
-                # ダイマー警告のスタイリング 
+                # スタイリングの修正 (applymap -> map)
                 def style_dimer(val):
-                    if val >= 50: return 'background-color: #ffcccc; color: red; font-weight: bold'
-                    if val >= 40: return 'background-color: #fff4e6; color: #d97706'
+                    if val >= 50: return 'background-color: #ffcccc; color: red'
+                    if val >= 40: return 'background-color: #fff4e6'
                     return ''
                 
-                st.subheader("✅ 設計結果")
-                st.dataframe(res_df.style.applymap(style_dimer, subset=['Dimer_Tm']))
+                st.dataframe(res_df.style.map(style_dimer, subset=['Dimer_Tm']))
                 
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -83,14 +84,14 @@ if st.button("プライマー設計を開始"):
                     for i, res in enumerate(results):
                         ws.set_row(i + 1, 180 if "Circular" in view_mode else 80)
                         img = create_map_image(res, detected, view_mode=view_mode)
-                        ws.insert_image(i + 1, 7, f'map_{i}.png', {'image_data': img, 'x_scale': 0.5, 'y_scale': 0.5, 'y_offset': 5})
-                st.download_button("Excelレポートをダウンロード", output.getvalue(), "sdm_analysis_report.xlsx")
+                        ws.insert_image(i + 1, 7, f'map_{i}.png', {'image_data': img, 'x_scale': 0.5, 'y_scale': 0.5})
+                st.download_button("Excelダウンロード", output.getvalue(), "report.xlsx")
             else: st.warning("条件に合うプライマーが見つかりませんでした。")
         except Exception as e: st.error(f"エラー: {e}")
 
 if 'results' in st.session_state:
     st.divider()
-    sel = st.selectbox("詳細を表示する変異を選択", [r['mutation_name'] for r in st.session_state['results']])
+    sel = st.selectbox("変異を選択", [r['mutation_name'] for r in st.session_state['results']])
     res = next(r for r in st.session_state['results'] if r['mutation_name'] == sel)
     img_buf = create_map_image(res, st.session_state['detected_features'], view_mode=view_mode)
-    st.image(img_buf, caption=f"Map: {sel} ({view_mode})", use_column_width=True)
+    st.image(img_buf, use_column_width=True)
