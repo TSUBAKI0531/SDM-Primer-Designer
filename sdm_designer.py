@@ -3,13 +3,13 @@ from Bio.SeqUtils import MeltingTemp as mt
 from Bio import Restriction
 
 class SDMPrimerDesigner:
-    # --- 追加: 主要なプラスミド Feature のデータベース ---
-    # 一般的なプラスミドパーツの代表的な配列（必要に応じて拡張可能）
+    # --- 修正: 検出感度向上のためのシグネチャー配列データベース ---
+    # パーツ全体ではなく、特徴的な30bp程度の配列を指定することで検出率を高めます
     FEATURE_LIBRARY = {
-        "AmpR": "ATGAGTATTCAACATTTCCGTGTCGCCCTTATTCCCTTTTTTGCGGCATTTTGCCTTCCTGTTTTTGCTCACCCAGAAACGCTGGTGAAAGTAAAAGATGCTGAAGATCAGTTGGGTGCACGAGTGGGTTACATCGAACTGGATCTCAACAGCGGTAAGATCCTTGAGAGTTTTCGCCCCGAAGAACGTTTTCCAATGATGAGCACTTTTAAAGTTCTGCTATGTGGCGCGGTATTATCCCGTATTGACGCCGGGCAAGAGCAACTCGGTCGCCGCATACACTATTCTCAGAATGACTTGGTTGAGTACTCACCAGTCACAGAAAAGCATCTTACGGATGGCATGACAGTAAGAGAATTATGCAGTGCTGCCATAACCATGAGTGATAACACTGCGGCCAACTTACTTCTGACAACGATCGGAGGACCGAAGGAGCTAACCGCTTTTTTGCACAACATGGGGGATCATGTAACTCGCCTTGATCGTTGGGAACCGGAGCTGAATGAAGCCATACCAAACGACGAGCGTGACACCACGATGCCTGTAGCAATGGCAACAACGTTGCGCAAACTATTAACTGGCGAACTACTTACTCTAGCTTCCCGGCAACAATTAATAGACTGGATGGAGGCGGATAAAGTTGCAGGACCACTTCTGCGCTCGGCCCTTCCGGCTGGCTGGTTTATTGCTGATAAATCTGGAGCCGGTGAGCGTGGGTCTCGCGGTATCATTGCAGCACTGGGGCCAGATGGTAAGCCCTCCCGTATCGTAGTTATCTACACGACGGGGAGTCAGGCAACTATGGATGAACGAAATAGACAGATCGCTGAGATAGGTGCCTCACTGATTAAGCATTGGTAA",
-        "pUC ori": "GGTGAGCGTGGGTCTCGCGGTATCATTGCAGCACTGGGGCCAGATGGTAAGCCCTCCCGTATCGTAGTTATCTACACGACGGGGAGTCAGGCAACTATGGATGAACGAAATAGACAGATCGCTGAGATAGGTGCCTCACTGATTAAGCATTGGTAA",
+        "AmpR (bla gene)": "TTTCCGTGTCGCCCTTATTCCCTTTTTTGC", 
+        "pUC ori": "GGTGAGCGTGGGTCTCGCGGTATCATTGC", 
         "T7 promoter": "TAATACGACTCACTATAGGG",
-        "CMV promoter": "TGACATTGATTATTGACTAGTTATTAATAGTAATCAATTACGGGGTCATTAGTTCATAGCCCATATATGGAGTTCCGCGTTACATAACTTACGGTAAATGGCCCGCCTGGCTGACCGCCCAACGACCCCCGCCCATTGACGTCAATAATGACGTATGTTCCCATAGTAACGCCAATAGGGACTTTCCATTGACGTCAATGGGTGGAGTATTTACGGTAAACTGCCCACTTGGCAGTACATCAAGTGTATCATATGCCAAGTACGCCCCCTATTGACGTCAATGACGGTAAATGGCCCGCCTGGCATTATGCCCAGTACATGACCTTATGGGACTTTCCTACTTGGCAGTACATCTACGTATTAGTCATCGCTATTACCATGGTGATGCGGTTTTGGCAGTACATCAATGGGCGTGGATAGCGGTTTGACTCACGGGGATTTCCAAGTCTCCACCCCATTGACGTCAATGGGAGTTTGTTTTGGCACCAAAATCAACGGGACTTTCCAAAATGTCGTAACAACTCCGCCCCATTGACGCAAATGGGCGGTAGGCGTGTACGGTGGGAGGTCTATATAAGCAGAGCTCTCTGGCTAACTAGAGAACCCACTGCTTACTGGCTTATCGAAATTAATACGACTCACTATAGGGAGACCCAAGCT",
+        "CMV promoter": "TGACATTGATTATTGACTAGTTATTAATAG",
     }
 
     ECOLI_CODONS = {
@@ -25,42 +25,23 @@ class SDMPrimerDesigner:
         self.host_codons = host_codons if host_codons else self.ECOLI_CODONS
         self.enzymes = Restriction.CommOnly
 
-    # --- 追加: Feature 検出メソッド ---
     def detect_features(self, sequence):
-        """配列内から主要な Feature を検索する"""
+        """シグネチャー配列を用いてパーツを検出"""
         found_features = []
         seq_str = str(sequence).upper()
         
-        for name, feat_seq in self.FEATURE_LIBRARY.items():
-            # 順方向の検索
-            start = seq_str.find(feat_seq)
+        for name, sig_seq in self.FEATURE_LIBRARY.items():
+            # 順方向
+            start = seq_str.find(sig_seq)
             if start != -1:
-                found_features.append({
-                    "name": name,
-                    "start": start,
-                    "end": start + len(feat_seq),
-                    "strand": 1
-                })
-                continue # 見つかったら次へ
-
-            # 逆相補鎖の検索
-            rc_feat_seq = str(Seq(feat_seq).reverse_complement())
-            start_rc = seq_str.find(rc_feat_seq)
+                found_features.append({"name": name, "start": start, "end": start + len(sig_seq), "strand": 1})
+                continue
+            # 逆方向
+            rc_sig = str(Seq(sig_seq).reverse_complement())
+            start_rc = seq_str.find(rc_sig)
             if start_rc != -1:
-                found_features.append({
-                    "name": name,
-                    "start": start_rc,
-                    "end": start_rc + len(rc_feat_seq),
-                    "strand": -1
-                })
+                found_features.append({"name": name, "start": start_rc, "end": start_rc + len(rc_sig), "strand": -1})
         return found_features
-
-    def _get_restriction_diff(self, original_segment, modified_segment):
-        analysis_orig = Restriction.Analysis(self.enzymes, Seq(original_segment))
-        analysis_mod = Restriction.Analysis(self.enzymes, Seq(modified_segment))
-        orig_sites = set([str(e) for e, pos in analysis_orig.full().items() if pos])
-        mod_sites = set([str(e) for e, pos in analysis_mod.full().items() if pos])
-        return list(mod_sites - orig_sites), list(orig_sites - mod_sites)
 
     def design(self, row, method='overlapping', target_tm=68):
         name = row['mutation_name']
@@ -79,13 +60,14 @@ class SDMPrimerDesigner:
         else: return None
 
         mod_seq = self.template_dna[:dna_idx] + mut_dna + self.template_dna[dna_idx + ref_len:]
-
+        
+        # 制限酵素チェック
         window = 20
         check_start = max(0, dna_idx - window)
         check_end = min(len(self.template_dna), dna_idx + len(mut_dna) + window)
-        new_sites, lost_sites = self._get_restriction_diff(
-            self.template_dna[check_start:check_end], mod_seq[check_start:check_end]
-        )
+        analysis_orig = Restriction.Analysis(self.enzymes, Seq(self.template_dna[check_start:check_end]))
+        analysis_mod = Restriction.Analysis(self.enzymes, Seq(mod_seq[check_start:check_end]))
+        new_sites = set([str(e) for e, p in analysis_mod.full().items() if p]) - set([str(e) for e, p in analysis_orig.full().items() if p])
 
         if method == 'overlapping':
             for length in range(15, 45):
@@ -96,13 +78,8 @@ class SDMPrimerDesigner:
                 tm = mt.Tm_NN(Seq(fwd))
                 if tm >= target_tm:
                     return {
-                        "mutation_name": name,
-                        "fwd_primer": fwd,
-                        "rev_primer": str(Seq(fwd).reverse_complement()),
-                        "Tm": round(tm, 2),
-                        "New_Sites": ", ".join(new_sites) if new_sites else "None",
-                        "full_seq": mod_seq,
-                        "mut_start": dna_idx,
-                        "mut_end": dna_idx + len(mut_dna)
+                        "mutation_name": name, "fwd_primer": fwd, "rev_primer": str(Seq(fwd).reverse_complement()),
+                        "Tm": round(tm, 2), "New_Sites": ", ".join(new_sites) if new_sites else "None",
+                        "full_seq": mod_seq, "mut_start": dna_idx, "mut_end": dna_idx + len(mut_dna)
                     }
         return None
