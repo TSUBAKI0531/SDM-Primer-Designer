@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import xlsxwriter
 from dna_features_viewer import GraphicFeature, GraphicRecord, CircularGraphicRecord
 
-st.set_page_config(page_title="SDM Primer Designer", layout="wide")
-st.title("🧬 SDM Primer Designer")
+st.set_page_config(page_title="SDM Primer Designer Pro", layout="wide")
+st.title("🧬 SDM Primer Designer Pro")
 
 def create_map_image(res, detected_features, view_mode="Linear"):
     features = []
@@ -29,15 +29,15 @@ def create_map_image(res, detected_features, view_mode="Linear"):
 
 if 'custom_features' not in st.session_state: st.session_state['custom_features'] = {}
 
-st.sidebar.header("1. 入力ファイルのアップロード")
-f_file = st.sidebar.file_uploader("FASTA", type=["fasta", "fa"])
-m_file = st.sidebar.file_uploader("変異リスト", type=["csv", "xlsx"])
+st.sidebar.header("1. 解析の設定とデータ入力")
+f_file = st.sidebar.file_uploader("FASTAファイル", type=["fasta", "fa"])
+m_file = st.sidebar.file_uploader("変異リスト (CSV/Excel)", type=["csv", "xlsx"])
 target_tm = st.sidebar.slider("目標 Tm値 (°C)", 50, 85, 68)
-view_mode = st.sidebar.radio("表示モード", ["Linear (直線状)", "Circular (円形)"], horizontal=True)
+view_mode = st.sidebar.radio("ベクターマップ表示形式", ["Linear (直線状)", "Circular (円形)"], horizontal=True)
 
 st.sidebar.divider()
-with st.sidebar.expander("✨ カスタムパーツ"):
-    n_name = st.text_input("名前"); n_seq = st.text_input("配列")
+with st.sidebar.expander("✨ カスタムパーツの管理"):
+    n_name, n_seq = st.text_input("パーツ名"), st.text_input("配列")
     if st.button("登録") and n_name and n_seq: st.session_state['custom_features'][n_name] = n_seq.strip().upper()
     if st.session_state['custom_features']:
         st.download_button("JSON保存", json.dumps(st.session_state['custom_features'], indent=4), "features.json", "application/json")
@@ -47,11 +47,11 @@ with st.sidebar.expander("✨ カスタムパーツ"):
         except: pass
 
 if not f_file or not m_file:
-    st.info("ファイルをアップロードしてください。")
+    st.info("サイドバーからファイルをアップロードして解析を開始してください。")
     st.stop()
 
-if st.button("プライマー設計を開始"):
-    with st.spinner("解析中..."):
+if st.button("🚀 プライマー設計と全解析を実行"):
+    with st.spinner("DNA解析、物性計算、マップ描画を統合処理中..."):
         try:
             fasta_content = f_file.getvalue().decode("utf-8")
             record = SeqIO.read(StringIO(fasta_content), "fasta")
@@ -60,10 +60,7 @@ if st.button("プライマー設計を開始"):
             st.session_state['detected_features'] = detected
             
             df = pd.read_csv(m_file) if m_file.name.endswith('.csv') else pd.read_excel(m_file)
-            results = []
-            for _, row in df.iterrows():
-                res = designer.design(row, target_tm=target_tm)
-                if res: results.append(res)
+            results = [designer.design(row, target_tm=target_tm) for _, row in df.iterrows() if designer.design(row, target_tm=target_tm)]
             
             if results:
                 st.session_state['results'] = results
@@ -74,49 +71,43 @@ if st.button("プライマー設計を開始"):
                     if val >= 40: return 'background-color: #fff4e6'
                     return ''
                 
-                st.subheader("✅ 設計結果 (物理特性付き)")
+                st.subheader("✅ 総合解析レポート")
                 st.dataframe(res_df.style.map(style_dimer, subset=['Dimer_Tm']))
                 
+                # Excel生成
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     res_df.to_excel(writer, index=False, sheet_name='SDM Report')
-                    ws = writer.sheets['SDM Report']; ws.set_column('H:H', 60)
+                    ws = writer.sheets['SDM Report']
+                    ws.set_column('I:I', 60) # マップ用列
                     for i, res in enumerate(results):
                         ws.set_row(i + 1, 180 if "Circular" in view_mode else 80)
                         img = create_map_image(res, detected, view_mode=view_mode)
-                        ws.insert_image(i + 1, 7, f'map_{i}.png', {'image_data': img, 'x_scale': 0.5, 'y_scale': 0.5})
-                st.download_button("Excelダウンロード", output.getvalue(), "report.xlsx")
+                        ws.insert_image(i + 1, 8, f'map_{i}.png', {'image_data': img, 'x_scale': 0.5, 'y_scale': 0.5})
+                st.download_button("Excelレポート(画像・物性込)を保存", output.getvalue(), "sdm_full_report.xlsx")
 
                 st.divider()
-                st.subheader("📦 プライマー注文用フォーマット")
+                st.subheader("📦 プライマー発注用リスト (Tab区切り)")
                 order_lines = []
                 for res in results:
                     order_lines.append(f"{res['mutation_name']}_F\t{res['fwd_primer']}")
                     order_lines.append(f"{res['mutation_name']}_R\t{res['rev_primer']}")
-                st.text_area("注文用リスト (コピー用)", "\n".join(order_lines), height=150)
-            else: st.warning("設計可能なプライマーが見つかりませんでした。")
-        except Exception as e: st.error(f"エラー: {e}")
+                st.text_area("そのままコピーして注文サイトへ", "\n".join(order_lines), height=150)
+            else: st.warning("設計可能な条件が見つかりませんでした。")
+        except Exception as e: st.error(f"解析エラー: {e}")
 
-# --- 到着後の溶解ガイド ---
 if 'results' in st.session_state:
     st.divider()
-    st.subheader("🧪 プライマー調製ガイド (到着後用)")
-    st.info("データシートの **合成量 (nmol)** を入力してください。100 μM（ストック液）にするための溶媒量を計算します。")
-    
+    st.subheader("🧪 実験ベンチ用溶解ガイド")
     prep_data = []
     for res in st.session_state['results']:
         prep_data.append({"Primer Name": f"{res['mutation_name']}_F", "nmol": 25.0})
         prep_data.append({"Primer Name": f"{res['mutation_name']}_R", "nmol": 25.0})
-    
     edited_df = st.data_editor(pd.DataFrame(prep_data), use_container_width=True)
-    
-    # 計算結果の表示
-    edited_df['TE/Water for 100 μM (μL)'] = edited_df['nmol'] * 10
-    edited_df['TE/Water for 10 μM (μL)'] = edited_df['nmol'] * 100
+    edited_df['TE (μL) for 100 μM'] = edited_df['nmol'] * 10
     st.dataframe(edited_df)
 
     st.divider()
-    sel = st.selectbox("詳細を表示する変異を選択", [r['mutation_name'] for r in st.session_state['results']])
+    sel = st.selectbox("詳細プレビューする変異を選択", [r['mutation_name'] for r in st.session_state['results']])
     res = next(r for r in st.session_state['results'] if r['mutation_name'] == sel)
-    img_buf = create_map_image(res, st.session_state['detected_features'], view_mode=view_mode)
-    st.image(img_buf, use_column_width=True)
+    st.image(create_map_image(res, st.session_state['detected_features'], view_mode=view_mode), use_column_width=True)

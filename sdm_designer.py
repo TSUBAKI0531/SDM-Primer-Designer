@@ -1,6 +1,6 @@
 from Bio.Seq import Seq
 from Bio.SeqUtils import MeltingTemp as mt
-from Bio.SeqUtils import molecular_weight # 分子量計算用に追加
+from Bio.SeqUtils import molecular_weight
 from Bio import Restriction
 
 class SDMPrimerDesigner:
@@ -25,16 +25,13 @@ class SDMPrimerDesigner:
         self.enzymes = Restriction.CommOnly
 
     def _calculate_gc_content(self, seq_str):
-        """GC含量(%)を計算する"""
-        g = seq_str.count('G')
-        c = seq_str.count('C')
+        g, c = seq_str.count('G'), seq_str.count('C')
         return round((g + c) / len(seq_str) * 100, 1)
 
     def _calculate_self_dimer_tm(self, seq_str):
         seq = str(seq_str).upper()
         rc = str(Seq(seq).reverse_complement())
-        n = len(seq)
-        max_dimer_tm = 0
+        n, max_dimer_tm = len(seq), 0
         for shift in range(-n + 4, n - 3):
             s1, s2 = (seq[:n+shift], rc[-shift:]) if shift < 0 else (seq[shift:], rc[:n-shift])
             if len(s1) >= 4:
@@ -72,9 +69,9 @@ class SDMPrimerDesigner:
         mod_seq = self.template_dna[:dna_idx] + mut_dna + self.template_dna[dna_idx + ref_len:]
         win = 20
         c_s, c_e = max(0, dna_idx - win), min(len(self.template_dna), dna_idx + len(mut_dna) + win)
-        a_orig = Restriction.Analysis(self.enzymes, Seq(self.template_dna[c_s:c_e]))
-        a_mod = Restriction.Analysis(self.enzymes, Seq(mod_seq[c_s:c_e]))
+        a_orig, a_mod = Restriction.Analysis(self.enzymes, Seq(self.template_dna[c_s:c_e])), Restriction.Analysis(self.enzymes, Seq(mod_seq[c_s:c_e]))
         new_sites = set([str(e) for e, p in a_mod.full().items() if p]) - set([str(e) for e, p in a_orig.full().items() if p])
+
         if method == 'overlapping':
             for length in range(15, 45):
                 start, end = dna_idx - length, dna_idx + len(mut_dna) + length
@@ -82,15 +79,13 @@ class SDMPrimerDesigner:
                 fwd = str(mod_seq[start:end])
                 tm = mt.Tm_NN(Seq(fwd))
                 if tm >= target_tm:
-                    fwd_seq_obj = Seq(fwd)
+                    f_obj = Seq(fwd)
                     return {
-                        "mutation_name": name, 
-                        "fwd_primer": fwd, 
-                        "rev_primer": str(fwd_seq_obj.reverse_complement()),
-                        "Tm": round(tm, 2), 
-                        "GC_%": self._calculate_gc_content(fwd), # 追加
-                        "MW": round(molecular_weight(fwd_seq_obj, seq_type='DNA'), 1), # 追加
+                        "mutation_name": name, "fwd_primer": fwd, "rev_primer": str(f_obj.reverse_complement()),
+                        "Tm": round(tm, 2), "GC_%": self._calculate_gc_content(fwd),
+                        "MW": round(molecular_weight(f_obj, seq_type='DNA'), 1),
                         "Dimer_Tm": self._calculate_self_dimer_tm(fwd),
+                        "Product_Size(bp)": len(mod_seq), # 追加
                         "New_Sites": ", ".join(new_sites) if new_sites else "None",
                         "full_seq": mod_seq, "mut_start": dna_idx, "mut_end": dna_idx + len(mut_dna)
                     }
