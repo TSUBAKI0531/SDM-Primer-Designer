@@ -3,7 +3,6 @@ from Bio.SeqUtils import MeltingTemp as mt
 from Bio import Restriction
 
 class SDMPrimerDesigner:
-    # 標準的なパーツのシグネチャー配列
     FEATURE_LIBRARY = {
         "AmpR (bla gene)": "TTTCCGTGTCGCCCTTATTCCCTTTTTTGC", 
         "pUC ori": "GGTGAGCGTGGGTCTCGCGGTATCATTGC", 
@@ -25,22 +24,17 @@ class SDMPrimerDesigner:
         self.enzymes = Restriction.CommOnly
 
     def detect_features(self, sequence, custom_library=None):
-        """標準ライブラリとカスタムライブラリからパーツを検索"""
         found_features = []
         seq_str = str(sequence).upper()
-        
-        # 検索用ライブラリを統合
         search_library = self.FEATURE_LIBRARY.copy()
         if custom_library:
             search_library.update(custom_library)
         
         for name, sig_seq in search_library.items():
-            # 順方向の検索
             start = seq_str.find(sig_seq.upper())
             if start != -1:
                 found_features.append({"name": name, "start": start, "end": start + len(sig_seq), "strand": 1})
                 continue
-            # 逆方向の検索
             rc_sig = str(Seq(sig_seq).reverse_complement()).upper()
             start_rc = seq_str.find(rc_sig)
             if start_rc != -1:
@@ -65,7 +59,6 @@ class SDMPrimerDesigner:
 
         mod_seq = self.template_dna[:dna_idx] + mut_dna + self.template_dna[dna_idx + ref_len:]
         
-        # 制限酵素チェック（変異周辺）
         window = 20
         check_start = max(0, dna_idx - window)
         check_end = min(len(self.template_dna), dna_idx + len(mut_dna) + window)

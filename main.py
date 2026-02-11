@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import json # JSON処理用に追加
 from io import StringIO
 from sdm_designer import SDMPrimerDesigner
 from Bio import SeqIO
@@ -9,7 +10,7 @@ from dna_features_viewer import GraphicFeature, GraphicRecord, CircularGraphicRe
 st.set_page_config(page_title="SDM Primer Designer", layout="wide")
 st.title("🧬 SDM Primer Designer")
 
-# カスタムパーツの一時保存用
+# セッション状態の初期化
 if 'custom_features' not in st.session_state:
     st.session_state['custom_features'] = {}
 
@@ -20,7 +21,8 @@ mutations_file = st.sidebar.file_uploader("変異リストをアップロード"
 target_tm = st.sidebar.slider("目標 Tm値 (°C)", 50, 85, 68)
 
 st.sidebar.divider()
-with st.sidebar.expander("✨ カスタムパーツの登録"):
+with st.sidebar.expander("✨ カスタムパーツの管理"):
+    # 新規登録フォーム
     new_f_name = st.text_input("パーツ名 (例: GFP)")
     new_f_seq = st.text_input("特徴的な配列 (20bp~)")
     if st.button("登録"):
@@ -28,10 +30,34 @@ with st.sidebar.expander("✨ カスタムパーツの登録"):
             st.session_state['custom_features'][new_f_name] = new_f_seq.strip().upper()
             st.success(f"{new_f_name} を追加しました")
         else: st.error("入力を確認してください")
+
+    st.write("---")
+    # 書き出し (JSON Export)
+    if st.session_state['custom_features']:
+        json_str = json.dumps(st.session_state['custom_features'], indent=4)
+        st.download_button(
+            label="JSONとして書き出し",
+            data=json_str,
+            file_name="custom_features.json",
+            mime="application/json"
+        )
     
+    # 読み込み (JSON Import)
+    uploaded_json = st.file_uploader("JSONから読み込み", type=["json"])
+    if uploaded_json is not None:
+        try:
+            imported_data = json.load(uploaded_json)
+            st.session_state['custom_features'].update(imported_data)
+            st.success("JSONから読み込みました")
+            # 重複読み込み防止のため一度クリアして再実行を促す場合はrerun
+            # st.rerun() 
+        except Exception as e:
+            st.error(f"読み込みエラー: {e}")
+
     # 登録済みリストの表示と削除
     if st.session_state['custom_features']:
         st.write("---")
+        st.write("登録済みリスト:")
         for n in list(st.session_state['custom_features'].keys()):
             c1, c2 = st.columns([4, 1])
             c1.caption(n)
@@ -55,6 +81,11 @@ if st.button("プライマー設計を開始"):
             detected = designer.detect_features(str(record.seq), custom_library=st.session_state['custom_features'])
             st.session_state['detected_features'] = detected
             
+            if detected:
+                st.success(f"🔍 検出されたパーツ: {', '.join([f['name'] for f in detected])}")
+            else:
+                st.warning("⚠️ 主要パーツは見つかりませんでした（配列がライブラリと完全一致しません）")
+
             df = pd.read_csv(mutations_file) if mutations_file.name.endswith('.csv') else pd.read_excel(mutations_file)
             results = [designer.design(row, target_tm=target_tm) for _, row in df.iterrows() if designer.design(row, target_tm=target_tm)]
             
@@ -69,13 +100,14 @@ if 'results' in st.session_state:
     st.divider()
     col1, col2 = st.columns(2)
     with col1:
-        sel = st.selectbox("変異を選択", [r['mutation_name'] for r in st.session_state['results']])
+        sel = st.selectbox("詳細を表示する変異を選択", [r['mutation_name'] for r in st.session_state['results']])
     with col2:
         view = st.radio("表示モード", ["Linear (直線状)", "Circular (円形)"], horizontal=True)
 
     res = next(r for r in st.session_state['results'] if r['mutation_name'] == sel)
     features = []
-    # 検出された全てのパーツを描画
+    
+    # 検出されたパーツを描画
     for f in st.session_state.get('detected_features', []):
         features.append(GraphicFeature(start=f['start'], end=f['end'], strand=f['strand'], color="#b3d9ff", label=f['name']))
     
