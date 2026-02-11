@@ -29,9 +29,10 @@ def create_map_image(res, detected_features, view_mode="Linear"):
 
 if 'custom_features' not in st.session_state: st.session_state['custom_features'] = {}
 
+# --- サイドバー ---
 st.sidebar.header("1. 解析の設定とデータ入力")
 f_file = st.sidebar.file_uploader("FASTAファイル", type=["fasta", "fa"])
-m_file = st.sidebar.file_uploader("変異リスト (CSV/Excel)", type=["csv", "xlsx"])
+m_file = st.sidebar.file_uploader("変異リスト", type=["csv", "xlsx"])
 target_tm = st.sidebar.slider("目標 Tm値 (°C)", 50, 85, 68)
 view_mode = st.sidebar.radio("ベクターマップ表示形式", ["Linear (直線状)", "Circular (円形)"], horizontal=True)
 
@@ -47,9 +48,10 @@ with st.sidebar.expander("✨ カスタムパーツの管理"):
         except: pass
 
 if not f_file or not m_file:
-    st.info("サイドバーからファイルをアップロードして解析を開始してください。")
+    st.info("ファイルをアップロードしてください。")
     st.stop()
 
+# --- メイン解析実行 ---
 if st.button("🚀 プライマー設計と全解析を実行"):
     with st.spinner("DNA解析、物性計算、マップ描画を統合処理中..."):
         try:
@@ -66,6 +68,7 @@ if st.button("🚀 プライマー設計と全解析を実行"):
                 st.session_state['results'] = results
                 res_df = pd.DataFrame(results).drop(['full_seq', 'mut_start', 'mut_end'], axis=1)
                 
+                # スタイリング (Dimer_Tm 警告)
                 def style_dimer(val):
                     if val >= 50: return 'background-color: #ffcccc; color: red'
                     if val >= 40: return 'background-color: #fff4e6'
@@ -79,13 +82,14 @@ if st.button("🚀 プライマー設計と全解析を実行"):
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     res_df.to_excel(writer, index=False, sheet_name='SDM Report')
                     ws = writer.sheets['SDM Report']
-                    ws.set_column('I:I', 60) # マップ用列
+                    ws.set_column('I:I', 60) # H列の隣、I列に画像を配置
                     for i, res in enumerate(results):
                         ws.set_row(i + 1, 180 if "Circular" in view_mode else 80)
                         img = create_map_image(res, detected, view_mode=view_mode)
                         ws.insert_image(i + 1, 8, f'map_{i}.png', {'image_data': img, 'x_scale': 0.5, 'y_scale': 0.5})
                 st.download_button("Excelレポート(画像・物性込)を保存", output.getvalue(), "sdm_full_report.xlsx")
 
+                # --- 発注用フォーマット ---
                 st.divider()
                 st.subheader("📦 プライマー発注用リスト (Tab区切り)")
                 order_lines = []
@@ -96,9 +100,10 @@ if st.button("🚀 プライマー設計と全解析を実行"):
             else: st.warning("設計可能な条件が見つかりませんでした。")
         except Exception as e: st.error(f"解析エラー: {e}")
 
+# --- 到着後の溶解ガイドと可視化 ---
 if 'results' in st.session_state:
     st.divider()
-    st.subheader("🧪 実験ベンチ用溶解ガイド")
+    st.subheader("🧪 プライマー調製ガイド (到着後用)")
     prep_data = []
     for res in st.session_state['results']:
         prep_data.append({"Primer Name": f"{res['mutation_name']}_F", "nmol": 25.0})

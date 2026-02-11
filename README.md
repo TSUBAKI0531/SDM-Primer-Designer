@@ -1,69 +1,80 @@
-SDM-Primer-Designer 🧬
+# 🧬 SDM Primer Designer Pro
 
-SDM-Primer-Designer は、部位特異的変異導入（Site-Directed Mutagenesis）試験のためのプライマー設計を自動化する Python ツールです。
-アミノ酸レベルでの変異指定、コドン最適化、制限酵素サイトの自動解析機能を備え、大規模な変異体ライブラリ作製を強力にサポートします。
+部位特異的変異導入（Site-Directed Mutagenesis; SDM）におけるプライマー設計から、実験ベンチでの試薬調製までを一貫してサポートする、バイオ・農学研究者向けのWebアプリケーションです。
 
+## 🌟 主な機能
 
-✨ 主な特徴 (Features)
-一括設計 (Batch Processing): ExcelやCSVリストから数百件の変異プライマーを一度に設計。
-アミノ酸指定 (AA-level Specification): 塩基ではなくアミノ酸での変異指定が可能（例：3番目のAlaをAspに置換）。
-コドン最適化 (Codon Optimization): 使用宿主（デフォルト：大腸菌）に合わせて頻度の高いコドンを自動選択。
-制限酵素チェック (Restriction Site Analysis): 変異導入によって「新しく出現したサイト」や「消失したサイト」を自動判定。スクリーニングを容易にします。
-複数の設計モード: * Overlapping: QuikChange法などに適した完全に重なるプライマー。
-Back-to-back: NEB Q5法などに適した、外側を向いたプライマーペア。
-詳細なログ出力: 各設計の成功・失敗理由をログファイルに自動保存。
+本アプリは、SDMのワークフローにおける「5つのステップ」を自動化し、ヒューマンエラーを最小限に抑えます。
 
+1.  **高度なプライマー設計**
+    * 置換 (Substitution)、挿入 (Insertion)、欠失 (Deletion) の全モードに対応。
+    * オーバーラップ法を用いた Tm値 ($T_m$) の自動最適化。
+    * **自己アニーリング (Self-Dimer $T_m$)** の算出と、PCR阻害リスクの自動警告。
 
-🚀 インストール (Installation)
-git clone https://github.com/あなたのユーザー名/SDM-Primer-Designer.git
-cd SDM-Primer-Designer
+2.  **インタラクティブな可視化**
+    * `dna_features_viewer` を用いたベクターマップ表示（直線状/円形切り替え）。
+    * 標準パーツ（AmpR, ori等）に加え、**カスタムパーツ（GFP, Tag等）** の自由な登録・JSON管理。
+
+3.  **プロ仕様のレポート出力**
+    * 設計データ、物理特性、制限酵素情報を網羅した **画像埋め込み型Excelレポート** の生成。
+    * 表示モード（Linear/Circular）に同期したマップ画像の自動配置。
+
+4.  **発注プロセスの自動化**
+    * 合成会社（IDT, ユーロフィン等）のフォームにそのまま貼り付け可能な **タブ区切りテキスト形式** での一括出力。
+
+5.  **実験ベンチ支援**
+    * **PCR産物サイズ (Product Size)** の自動予測（電気泳動での確認用）。
+    * 到着したプライマーの nmol 数から **$100 \mu M$ ストック液** 作成に必要な溶媒量を算出する溶解ガイド。
+
+## 🛠 テックスタック
+
+* **Language:** Python 3.12+
+* **Framework:** Streamlit
+* **Bioinformatics:** Biopython (Seq, SeqUtils, Restriction, SeqIO)
+* **Visualization:** Matplotlib, dna_features_viewer
+* **Reporting:** Pandas, XlsxWriter
+
+## 🚀 ローカルでのセットアップ
+
+```bash
+# リポジトリのクローン
+git clone [https://github.com/TSUBAKI0531/Vector2Fold.git](https://github.com/TSUBAKI0531/Vector2Fold.git)
+cd Vector2Fold
+
+# 仮想環境の作成と起動
+python -m venv .venv
+source .venv/bin/activate  # Windowsの場合は .venv\Scripts\activate
+
+# 依存ライブラリのインストール
 pip install -r requirements.txt
+pip install xlsxwriter dna_features_viewer matplotlib biopython streamlit
+
+# アプリの起動
+streamlit run main.py
+📝 使用方法
+FASTAファイルのアップロード: 鋳型となるプラスミド配列を読み込みます。
+
+変異リストのアップロード: CSV/Excel形式で変異情報を入力します。
+
+カスタムパーツの登録: 必要に応じて、JSONから検索したい重要パーツを読み込みます。
+
+解析実行: プライマーが自動設計され、物理特性とマップが表示されます。
+
+レポート保存: Excelレポートをダウンロードし、発注用テキストをコピーします。
 
 
-🛠 使い方 (Usage)
-1. 入力ファイルの準備
-template.fasta: 鋳型となるDNA配列ファイル。
-mutations.csv: 設計したい変異のリスト。以下の列を含めてください：
-mutation_name,mode,aa_pos,target_aa,insert_seq,del_len
-M1_Y3D,sub,3,D,,0
-M2_Ins,ins,6,,GGGGGG,0
-M3_Del,del,10,,,2
+---
 
+## 2. GitHub へのプッシュ用コード
 
-2. 実行
-from sdm_designer import batch_process
+READMEの更新を反映させます。
 
-# 実行
-batch_process(
-    fasta_path="examples/template.fasta",
-    csv_path="examples/mutations.csv",
-    method='overlapping' # または 'back-to-back'
-)
+```bash
+# 変更を反映
+git add README.md
 
+# コミット（「Pro版の機能を反映」）
+git commit -m "Update README: Reflect all Pro features (Dimer check, Excel reporting, Dissolution guide)"
 
-📊 出力 (Output)
-実行後、primer_results.xlsx が生成されます。
-
-fwd/rev_primer: 設計されたプライマー配列
-tm: 計算されたTm値
-new_sites: 変異によって新しく作成された制限酵素サイト
-lost_sites: 変異によって消失した制限酵素サイト
-
-
-🧪 依存関係 (Dependencies)
-Biopython
-pandas
-openpyxl
-
-
-📄 ライセンス (License)
-このプロジェクトは MIT License の下で公開されています。
-
-
-🤝 貢献 (Contributing)
-バグ報告や機能改善の提案は、Issues または Pull Request までお気軽にどうぞ！
-
-
-💡 工夫したポイント（これを載せると評価が上がります）
-研究者の視点: 「制限酵素サイトの消失・出現」をリストアップすることで、高額なシーケンス解析に回す前の「一次スクリーニング（酵素消化チェック）」を圧倒的に楽にします。
-堅牢な設計: 実験条件に合うプライマーが見つからない場合、どのパラメータ（Tmなど）が原因かをログに出力し、試行錯誤の時間を短縮します。
+# プッシュ
+git push origin main

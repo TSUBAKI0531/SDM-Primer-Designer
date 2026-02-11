@@ -4,6 +4,7 @@ from Bio.SeqUtils import molecular_weight
 from Bio import Restriction
 
 class SDMPrimerDesigner:
+    # 標準的なプラスミドパーツのシグネチャー配列
     FEATURE_LIBRARY = {
         "AmpR (bla gene)": "TTTCCGTGTCGCCCTTATTCCCTTTTTTGC", 
         "pUC ori": "GGTGAGCGTGGGTCTCGCGGTATCATTGC", 
@@ -48,11 +49,13 @@ class SDMPrimerDesigner:
         if custom_library: lib.update(custom_library)
         for name, sig in lib.items():
             start = seq_str.find(sig.upper())
-            if start != -1: found.append({"name": name, "start": start, "end": start + len(sig), "strand": 1})
-            else:
-                rc_sig = str(Seq(sig).reverse_complement()).upper()
-                start_rc = seq_str.find(rc_sig)
-                if start_rc != -1: found.append({"name": name, "start": start_rc, "end": start_rc + len(rc_sig), "strand": -1})
+            if start != -1:
+                found.append({"name": name, "start": start, "end": start + len(sig), "strand": 1})
+                continue
+            rc_sig = str(Seq(sig).reverse_complement()).upper()
+            start_rc = seq_str.find(rc_sig)
+            if start_rc != -1:
+                found.append({"name": name, "start": start_rc, "end": start_rc + len(rc_sig), "strand": -1})
         return found
 
     def design(self, row, method='overlapping', target_tm=68):
@@ -66,10 +69,12 @@ class SDMPrimerDesigner:
         elif mode == 'del':
             mut_dna, ref_len = "", int(row.get('del_len', 1)) * 3
         else: return None
+        
         mod_seq = self.template_dna[:dna_idx] + mut_dna + self.template_dna[dna_idx + ref_len:]
         win = 20
         c_s, c_e = max(0, dna_idx - win), min(len(self.template_dna), dna_idx + len(mut_dna) + win)
-        a_orig, a_mod = Restriction.Analysis(self.enzymes, Seq(self.template_dna[c_s:c_e])), Restriction.Analysis(self.enzymes, Seq(mod_seq[c_s:c_e]))
+        a_orig = Restriction.Analysis(self.enzymes, Seq(self.template_dna[c_s:c_e]))
+        a_mod = Restriction.Analysis(self.enzymes, Seq(mod_seq[c_s:c_e]))
         new_sites = set([str(e) for e, p in a_mod.full().items() if p]) - set([str(e) for e, p in a_orig.full().items() if p])
 
         if method == 'overlapping':
@@ -85,7 +90,7 @@ class SDMPrimerDesigner:
                         "Tm": round(tm, 2), "GC_%": self._calculate_gc_content(fwd),
                         "MW": round(molecular_weight(f_obj, seq_type='DNA'), 1),
                         "Dimer_Tm": self._calculate_self_dimer_tm(fwd),
-                        "Product_Size(bp)": len(mod_seq), # 追加
+                        "Product_Size(bp)": len(mod_seq),
                         "New_Sites": ", ".join(new_sites) if new_sites else "None",
                         "full_seq": mod_seq, "mut_start": dna_idx, "mut_end": dna_idx + len(mut_dna)
                     }
