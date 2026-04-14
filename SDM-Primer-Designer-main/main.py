@@ -59,7 +59,7 @@ def render_protocol_section(protocol: PCRProtocol):
     with col_mix:
         st.markdown("**PCR 反応液組成 (50 μL 系)**")
         mix_df = pd.DataFrame(protocol.to_reaction_table())
-        st.dataframe(mix_df, hide_index=True, use_container_width=True)
+        st.dataframe(mix_df, hide_index=True, width="stretch")
         st.caption("※ PCR 反応液は室温調製可。酵素は氷上保管。")
 
     with col_cycle:
@@ -78,7 +78,7 @@ def render_protocol_section(protocol: PCRProtocol):
                 {"鋳型種類": "ヒトゲノム DNA", "至適量": "5 〜 200 ng"},
             ]
             st.dataframe(pd.DataFrame(template_data),
-                         hide_index=True, use_container_width=True)
+                         hide_index=True, width="stretch")
             st.caption("200 ng 超の場合は伸長時間を 30〜60 sec/kb に延長")
 
         with trouble_col:
@@ -94,7 +94,7 @@ def render_protocol_section(protocol: PCRProtocol):
                  "対策": "鋳型DNA減量, サイクル 25〜30"},
             ]
             st.dataframe(pd.DataFrame(trouble_data),
-                         hide_index=True, use_container_width=True)
+                         hide_index=True, width="stretch")
 
     # --- 注意事項 ---
     if protocol.notes:
@@ -234,7 +234,7 @@ if 'results' in st.session_state:
         prep_data.append({
             "Primer Name": f"{res['mutation_name']}_R", "nmol": 25.0
         })
-    edited_df = st.data_editor(pd.DataFrame(prep_data), use_container_width=True)
+    edited_df = st.data_editor(pd.DataFrame(prep_data), width="stretch")
     edited_df['TE (μL) for 100 μM'] = edited_df['nmol'] * 10
     st.dataframe(edited_df)
 
@@ -284,7 +284,7 @@ if 'results' in st.session_state:
                 "Primer Tm": f"{p.primer_tm}℃",
             })
         st.dataframe(pd.DataFrame(summary_data),
-                     hide_index=True, use_container_width=True)
+                     hide_index=True, width="stretch")
 
     with tab_single:
         sel_name = st.selectbox("プロトコルを表示する変異を選択",
@@ -318,5 +318,4 @@ if 'results' in st.session_state:
     st.image(
         create_map_image(res, st.session_state['detected_features'],
                          view_mode=view_mode),
-        use_container_width=True,
     )
