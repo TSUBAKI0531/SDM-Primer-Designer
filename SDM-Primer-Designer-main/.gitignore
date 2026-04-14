@@ -1,0 +1,5 @@
+__pycache__/
+*.log
+*.xlsx
+*.csv
+.DS_Store
