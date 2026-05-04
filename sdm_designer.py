@@ -252,6 +252,15 @@ class SDMPrimerDesigner:
         return round((g + c) / len(seq_str) * 100, 1)
 
     def _calculate_self_dimer_tm(self, seq_str):
+        """
+        プライマー配列の自己ダイマー形成における最大 Tm 値を算出します。
+
+        Args:
+            seq_str (str): 解析対象のプライマー塩基配列。
+
+        Returns:
+            float: 推定される自己ダイマーの最大 Tm 値 (°C)。
+        """
         seq = str(seq_str).upper()
         rc = str(Seq(seq).reverse_complement())
         n, max_dimer_tm = len(seq), 0
@@ -281,6 +290,17 @@ class SDMPrimerDesigner:
         return found
 
     def design(self, row, method='overlapping', target_tm=68):
+        """
+        指定された変異に基づいて、目標 Tm 値を満たすオーバーラッププライマーを設計します。
+
+        Args:
+            row (dict): 変異情報（名前、位置、モード、変異後のアミノ酸/挿入配列/欠失長などを含むデータ）。
+            method (str): 設計手法（現在は 'overlapping' のみ対応）。
+            target_tm (int): プライマーの目標 Tm 値 (°C)。
+
+        Returns:
+            Optional[dict]: プライマー配列、Tm 値、物性、新規制限酵素サイト等を含む辞書。設計失敗時は None。
+        """
         name = row['mutation_name']
         dna_idx = (int(row['aa_pos']) - 1) * 3
         mode = row['mode']
